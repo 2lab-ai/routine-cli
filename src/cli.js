@@ -1,205 +1,283 @@
 #!/usr/bin/env node
 
-import { writeFileSync, readdirSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
-import { loadRoutine, generateTemplate } from './loader.js';
-import { runRoutine } from './runner.js';
+/**
+ * routine-cli - Deterministic routine timer CLI
+ * Per MVP_SPEC.md
+ */
+
+import { homedir } from 'os';
+import { join } from 'path';
+import { getDb, closeDb } from './db.js';
+import { routineAdd, routineList, routineShow } from './commands/routine.js';
+import { sessionStart, sessionActive, sessionStatus, sessionPause, sessionResume, sessionStop } from './commands/session.js';
+import { todaySummary } from './commands/today.js';
+import { sessionLog, sessionAmend, sessionRm, routineStreak, routineSkip, routineUnskip } from './commands/stubs.js';
+import {
+  CLIError,
+  errorResult,
+  successResult,
+  getExitCode,
+  EXIT_SUCCESS,
+  EXIT_USER_INPUT_ERROR,
+  ERR_INVALID_ARGS
+} from './errors.js';
 
 const VERSION = '0.1.0';
+const DEFAULT_DB_PATH = join(homedir(), '.routine', 'routine.sqlite3');
 
-const HELP = `clawd-ogm v${VERSION} - Minimal routine runner CLI
+const HELP = `routine-cli v${VERSION} - Deterministic routine timer CLI
 
 USAGE:
-  clawd-ogm <command> [options]
+  routine <command> [options]
 
 COMMANDS:
-  init [name]       Create a new routine file (default: my-routine.yaml)
-  validate <file>   Validate a routine file
-  list [dir]        List routine files in directory (default: .)
-  run <file>        Execute a routine file
+  Routine Management:
+    add        Create a new routine (requires --name, --rule, --ts)
+    list       List all routines
+    show       Show routine details (requires --routine)
 
-OPTIONS:
-  -h, --help        Show this help
-  -v, --version     Show version
+  Timer/Session:
+    start      Start a new session (requires --routine, --ts)
+    active     List active sessions
+    status     Get session status
+    pause      Pause a session (requires --session, --ts)
+    resume     Resume a paused session (requires --session, --ts)
+    stop       Stop a session (requires --session, --ts)
 
-EXIT CODES:
-  0 - Success (all steps passed)
-  1 - Routine execution failed (one or more steps failed)
-  2 - Invalid routine file or usage error
+  Daily Summary:
+    today      Show today's summary
+
+  Not Implemented (MVP):
+    log        Backfill a session
+    amend      Modify a session
+    rm         Delete a session
+    streak     Show streak
+    skip       Skip a date
+    unskip     Remove skip
+
+GLOBAL OPTIONS:
+  --format <human|json>   Output format (default: human)
+  --db <path>             Database path (default: ~/.routine/routine.sqlite3)
+  --tz <IANA_TZ>          Timezone for date interpretation
+  --no-interactive        Disable interactive prompts
+  --quiet                 Minimal output
 
 EXAMPLES:
-  clawd-ogm init my-task
-  clawd-ogm validate routines/deploy.yaml
-  clawd-ogm run routines/deploy.yaml
-  clawd-ogm list ./routines
+  routine add --name "Deep Work" --rule "daily>=30m" --ts 2026-01-31T09:00:00+09:00
+  routine start --routine "Deep Work" --ts 2026-01-31T09:00:00+09:00 --format json
+  routine active --format json
+  routine pause --session ses_01H... --ts 2026-01-31T09:15:00+09:00
+  routine stop --session ses_01H... --ts 2026-01-31T10:00:00+09:00
+
+EXIT CODES:
+  0 - Success
+  1 - Generic failure
+  2 - User input error
+  3 - Not found
+  4 - Ambiguity/conflict
+  5 - Not implemented
 `;
 
-function printHelp() {
-  console.log(HELP);
-  process.exit(0);
-}
-
-function printVersion() {
-  console.log(`clawd-ogm v${VERSION}`);
-  process.exit(0);
-}
-
-// Safe name pattern (alphanumeric, dash, underscore, dot - no path traversal)
-const SAFE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
 /**
- * init command - Create a new routine file
+ * Parse command line arguments
  */
-function cmdInit(args) {
-  const rawName = args[0] || 'my-routine';
-  const name = rawName.replace(/\.ya?ml$/, '');
-  
-  // Validate name is safe (no path traversal, special chars)
-  if (!SAFE_NAME_PATTERN.test(name)) {
-    console.error(`Error: Invalid routine name "${name}"`);
-    console.error('Name must start with alphanumeric, may contain: a-z A-Z 0-9 . _ -');
-    process.exit(2);
-  }
-  
-  const filename = `${name}.yaml`;
-  const filepath = resolve(filename);
-  
-  if (existsSync(filepath)) {
-    console.error(`Error: File already exists: ${filepath}`);
-    process.exit(1);
-  }
-  
-  const content = generateTemplate(name);
-  writeFileSync(filepath, content);
-  console.log(`Created: ${filepath}`);
-  console.log(`\nEdit the file, then run: clawd-ogm run ${filename}`);
-}
+function parseArgs(argv) {
+  const args = {
+    command: null,
+    format: 'human',
+    db: DEFAULT_DB_PATH,
+    tz: null,
+    noInteractive: false,
+    quiet: false,
+    // Command-specific
+    name: null,
+    rule: null,
+    ts: null,
+    routine: null,
+    session: null,
+    note: null,
+    tag: [],
+    date: null,
+    asOf: null,
+    start: null,
+    end: null,
+    reason: null,
+    explain: false,
+    granularity: 'day'
+  };
 
-/**
- * validate command - Validate a routine file
- */
-function cmdValidate(args) {
-  if (!args[0]) {
-    console.error('Error: Missing file argument');
-    console.error('Usage: clawd-ogm validate <file>');
-    process.exit(2);
-  }
-  
-  const filepath = resolve(args[0]);
-  const result = loadRoutine(filepath);
-  
-  if (result.success) {
-    console.log(`✓ Valid routine: ${result.data.name}`);
-    console.log(`  Steps: ${result.data.steps.length}`);
-    result.data.steps.forEach((step, i) => {
-      console.log(`  ${i + 1}. ${step.name} (${step.type})`);
-    });
-    process.exit(0);
-  } else {
-    console.error(`✗ Invalid routine: ${filepath}`);
-    result.errors.forEach(err => console.error(`  - ${err}`));
-    process.exit(2);
-  }
-}
+  let i = 0;
+  while (i < argv.length) {
+    const arg = argv[i];
 
-/**
- * list command - List routine files
- */
-function cmdList(args) {
-  const dir = resolve(args[0] || '.');
-  
-  if (!existsSync(dir)) {
-    console.error(`Error: Directory not found: ${dir}`);
-    process.exit(1);
-  }
-  
-  const files = readdirSync(dir).filter(f => 
-    f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.json')
-  );
-  
-  if (files.length === 0) {
-    console.log(`No routine files found in ${dir}`);
-    console.log('Routine files have extension: .yaml, .yml, or .json');
-    process.exit(0);
-  }
-  
-  console.log(`Routines in ${dir}:\n`);
-  
-  for (const file of files) {
-    const filepath = join(dir, file);
-    const result = loadRoutine(filepath);
-    
-    if (result.success) {
-      console.log(`  ✓ ${file}`);
-      console.log(`    Name: ${result.data.name}`);
-      console.log(`    Steps: ${result.data.steps.length}`);
-    } else {
-      console.log(`  ✗ ${file} (invalid)`);
+    if (arg === '-h' || arg === '--help') {
+      console.log(HELP);
+      process.exit(0);
     }
-    console.log('');
+
+    if (arg === '-v' || arg === '--version') {
+      console.log(`routine-cli v${VERSION}`);
+      process.exit(0);
+    }
+
+    if (arg === '--format') {
+      args.format = argv[++i];
+    } else if (arg === '--db') {
+      args.db = argv[++i];
+    } else if (arg === '--tz') {
+      args.tz = argv[++i];
+    } else if (arg === '--no-interactive') {
+      args.noInteractive = true;
+    } else if (arg === '--quiet') {
+      args.quiet = true;
+    } else if (arg === '--name') {
+      args.name = argv[++i];
+    } else if (arg === '--rule') {
+      args.rule = argv[++i];
+    } else if (arg === '--ts') {
+      args.ts = argv[++i];
+    } else if (arg === '--routine') {
+      args.routine = argv[++i];
+    } else if (arg === '--session') {
+      args.session = argv[++i];
+    } else if (arg === '--note') {
+      args.note = argv[++i];
+    } else if (arg === '--tag') {
+      args.tag.push(argv[++i]);
+    } else if (arg === '--date') {
+      args.date = argv[++i];
+    } else if (arg === '--as-of') {
+      args.asOf = argv[++i];
+    } else if (arg === '--start') {
+      args.start = argv[++i];
+    } else if (arg === '--end') {
+      args.end = argv[++i];
+    } else if (arg === '--reason') {
+      args.reason = argv[++i];
+    } else if (arg === '--explain') {
+      args.explain = true;
+    } else if (arg === '--granularity') {
+      args.granularity = argv[++i];
+    } else if (!arg.startsWith('-') && !args.command) {
+      args.command = arg;
+    }
+
+    i++;
+  }
+
+  return args;
+}
+
+/**
+ * Output result in specified format
+ */
+function output(result, format, command, meta = {}) {
+  if (format === 'json') {
+    const envelope = result.ok === false ? result : successResult(command, result, [], meta);
+    console.log(JSON.stringify(envelope, null, 2));
+  } else {
+    // Human-readable output
+    if (result.ok === false) {
+      console.error(`Error: ${result.error.message}`);
+      if (result.error.details) {
+        console.error(`Details: ${JSON.stringify(result.error.details, null, 2)}`);
+      }
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
   }
 }
 
 /**
- * run command - Execute a routine
+ * Route command to handler
  */
-async function cmdRun(args) {
-  if (!args[0]) {
-    console.error('Error: Missing file argument');
-    console.error('Usage: clawd-ogm run <file>');
-    process.exit(2);
-  }
-  
-  const filepath = resolve(args[0]);
-  const result = loadRoutine(filepath);
-  
-  if (!result.success) {
-    console.error(`✗ Invalid routine: ${filepath}`);
-    result.errors.forEach(err => console.error(`  - ${err}`));
-    process.exit(2);
-  }
-  
-  console.log('');
-  const runResult = await runRoutine(result.data, filepath);
-  
-  process.exit(runResult.success ? 0 : 1);
-}
-
-// Main
-async function main() {
-  const args = process.argv.slice(2);
-  
-  if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
-    printHelp();
-  }
-  
-  if (args.includes('-v') || args.includes('--version')) {
-    printVersion();
-  }
-  
-  const [command, ...rest] = args;
-  
-  switch (command) {
-    case 'init':
-      cmdInit(rest);
-      break;
-    case 'validate':
-      cmdValidate(rest);
-      break;
+function executeCommand(db, args) {
+  switch (args.command) {
+    // Routine management
+    case 'add':
+      return routineAdd(db, args);
     case 'list':
-      cmdList(rest);
-      break;
-    case 'run':
-      await cmdRun(rest);
-      break;
+      return routineList(db, args);
+    case 'show':
+      return routineShow(db, args);
+
+    // Session/Timer
+    case 'start':
+      return sessionStart(db, args);
+    case 'active':
+      return sessionActive(db, args);
+    case 'status':
+      return sessionStatus(db, args);
+    case 'pause':
+      return sessionPause(db, args);
+    case 'resume':
+      return sessionResume(db, args);
+    case 'stop':
+      return sessionStop(db, args);
+
+    // Daily summary
+    case 'today':
+      return todaySummary(db, args);
+
+    // Stubs
+    case 'log':
+      return sessionLog(db, args);
+    case 'amend':
+      return sessionAmend(db, args);
+    case 'rm':
+      return sessionRm(db, args);
+    case 'streak':
+      return routineStreak(db, args);
+    case 'skip':
+      return routineSkip(db, args);
+    case 'unskip':
+      return routineUnskip(db, args);
+
     default:
-      console.error(`Unknown command: ${command}`);
-      console.error('Run "clawd-ogm --help" for usage');
-      process.exit(2);
+      throw new CLIError(ERR_INVALID_ARGS, `unknown command: ${args.command}`);
   }
 }
 
-main().catch(err => {
-  console.error(`Fatal error: ${err.message}`);
-  process.exit(1);
-});
+/**
+ * Main entry point
+ */
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+
+  if (!args.command) {
+    console.log(HELP);
+    process.exit(0);
+  }
+
+  let db;
+  try {
+    db = await getDb(args.db);
+    const result = executeCommand(db, args);
+    output(result, args.format, args.command, { db: args.db, tz: args.tz });
+    process.exit(EXIT_SUCCESS);
+  } catch (err) {
+    if (err instanceof CLIError) {
+      const result = errorResult(err.code, err.message, err.details);
+      if (args.format === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.error(`Error [${err.code}]: ${err.message}`);
+        if (err.details && Object.keys(err.details).length > 0) {
+          console.error(`Details: ${JSON.stringify(err.details, null, 2)}`);
+        }
+      }
+      process.exit(err.exitCode || getExitCode(err.code));
+    } else {
+      // Unexpected error
+      console.error(`Fatal error: ${err.message}`);
+      if (args.format === 'json') {
+        console.log(JSON.stringify(errorResult('ERR_INTERNAL', err.message), null, 2));
+      }
+      process.exit(1);
+    }
+  } finally {
+    closeDb();
+  }
+}
+
+main();

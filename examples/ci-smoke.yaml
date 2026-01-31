@@ -1,7 +1,0 @@
-name: ci-smoke
-description: Minimal routine for integration tests (no sleep, no network)
-
-steps:
-  - name: echo
-    type: exec
-    command: echo "smoke"

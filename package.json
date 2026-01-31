@@ -1,15 +1,13 @@
 {
-  "name": "clawd-ogm",
+  "name": "routine-cli",
   "version": "0.1.0",
-  "description": "Minimal routine runner CLI",
+  "description": "Deterministic routine timer CLI for orchestrator integration",
   "type": "module",
   "bin": {
-    "clawd-ogm": "./src/cli.js"
+    "routine": "./src/cli.js"
   },
   "files": [
     "src",
-    "dist",
-    "examples",
     "README.md",
     "LICENSE"
   ],
@@ -18,19 +16,16 @@
   },
   "scripts": {
     "start": "node src/cli.js",
-    "test": "node --test",
-    "lint": "eslint src test scripts eslint.config.js",
-    "build": "node scripts/build.mjs",
-    "prepack": "npm run build"
+    "test": "node --test test/*.test.js",
+    "lint": "eslint src test"
   },
   "dependencies": {
-    "yaml": "^2.3.4",
-    "zod": "^3.22.4"
+    "sql.js": "^1.11.0",
+    "ulid": "^2.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "eslint": "^9.18.0",
-    "esbuild": "^0.24.2",
     "globals": "^15.14.0"
   },
   "license": "MIT"
