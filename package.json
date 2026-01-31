@@ -1,0 +1,26 @@
+{
+  "name": "clawd-ogm",
+  "version": "0.1.0",
+  "description": "Minimal routine runner CLI",
+  "type": "module",
+  "bin": {
+    "clawd-ogm": "./src/cli.js"
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "dependencies": {
+    "yaml": "^2.3.4",
+    "zod": "^3.22.4"
+  },
+  "license": "MIT"
+}

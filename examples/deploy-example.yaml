@@ -1,0 +1,23 @@
+name: deploy-example
+description: Example deployment routine (simulated)
+
+steps:
+  - name: check-environment
+    type: exec
+    command: echo "Checking environment..." && node --version && npm --version
+    
+  - name: build
+    type: exec
+    command: echo "Building project..." && sleep 1 && echo "Build complete!"
+    
+  - name: pause-before-deploy
+    type: sleep
+    duration: 1000
+    
+  - name: deploy
+    type: exec
+    command: echo "Deploying to staging..." && sleep 1 && echo "Deploy complete!"
+    
+  - name: health-check
+    type: exec
+    command: echo "Running health check..." && echo "All systems operational!"

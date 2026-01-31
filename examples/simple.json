@@ -1,0 +1,21 @@
+{
+  "name": "simple-json-routine",
+  "description": "Example routine in JSON format",
+  "steps": [
+    {
+      "name": "hello",
+      "type": "exec",
+      "command": "echo Hello from JSON!"
+    },
+    {
+      "name": "wait",
+      "type": "sleep",
+      "duration": 500
+    },
+    {
+      "name": "done",
+      "type": "exec",
+      "command": "echo Done!"
+    }
+  ]
+}
