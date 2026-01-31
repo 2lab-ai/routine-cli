@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 
 /**
  * Logger for routine execution

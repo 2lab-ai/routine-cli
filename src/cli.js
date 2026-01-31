@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { writeFileSync, readdirSync, existsSync } from 'fs';
-import { join, resolve, basename } from 'path';
+import { join, resolve } from 'path';
 import { loadRoutine, generateTemplate } from './loader.js';
 import { runRoutine } from './runner.js';
 

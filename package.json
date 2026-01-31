@@ -8,6 +8,7 @@
   },
   "files": [
     "src",
+    "dist",
     "examples",
     "README.md",
     "LICENSE"
@@ -16,11 +17,21 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node src/cli.js"
+    "start": "node src/cli.js",
+    "test": "node --test",
+    "lint": "eslint src test scripts eslint.config.js",
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "yaml": "^2.3.4",
     "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "esbuild": "^0.24.2",
+    "globals": "^15.14.0"
   },
   "license": "MIT"
 }
