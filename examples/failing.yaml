@@ -12,4 +12,4 @@ steps:
     
   - name: step-3
     type: exec
-    command: echo "This will also run"
+    command: echo "This will NOT run (routine stops on failure)"

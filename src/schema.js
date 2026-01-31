@@ -1,8 +1,16 @@
 import { z } from 'zod';
 
+// Safe name pattern (alphanumeric, dash, underscore, dot - no path traversal)
+const SafeNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+const SafeName = z.string().min(1).max(128).refine(
+  (s) => SafeNamePattern.test(s),
+  { message: 'Name must be alphanumeric (may include ._-), no spaces or special chars' }
+);
+
 // Step schemas
 const ExecStepSchema = z.object({
-  name: z.string().min(1),
+  name: SafeName,
   type: z.literal('exec'),
   command: z.string().min(1),
   workdir: z.string().optional(),
@@ -10,13 +18,13 @@ const ExecStepSchema = z.object({
 });
 
 const SleepStepSchema = z.object({
-  name: z.string().min(1),
+  name: SafeName,
   type: z.literal('sleep'),
   duration: z.number().positive(),
 });
 
 const HttpStepSchema = z.object({
-  name: z.string().min(1),
+  name: SafeName,
   type: z.literal('http'),
   url: z.string().url(),
   method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).optional().default('GET'),
@@ -33,7 +41,7 @@ const StepSchema = z.discriminatedUnion('type', [
 
 // Main routine schema
 export const RoutineSchema = z.object({
-  name: z.string().min(1),
+  name: SafeName,
   description: z.string().optional(),
   steps: z.array(StepSchema).min(1),
 });

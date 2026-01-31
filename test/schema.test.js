@@ -22,3 +22,30 @@ test('validateRoutine: missing steps fails', () => {
   assert.ok(Array.isArray(res.errors));
   assert.ok(res.errors.length > 0);
 });
+
+test('validateRoutine: rejects unsafe names (path traversal)', () => {
+  const routine = {
+    name: '../etc/passwd',
+    steps: [{ name: 'x', type: 'exec', command: 'echo hi' }]
+  };
+  const res = validateRoutine(routine);
+  assert.equal(res.success, false);
+});
+
+test('validateRoutine: rejects names with spaces', () => {
+  const routine = {
+    name: 'my routine',
+    steps: [{ name: 'step one', type: 'exec', command: 'echo hi' }]
+  };
+  const res = validateRoutine(routine);
+  assert.equal(res.success, false);
+});
+
+test('validateRoutine: allows names with dots, dashes, underscores', () => {
+  const routine = {
+    name: 'my_routine.v2-test',
+    steps: [{ name: 'step_1.run', type: 'exec', command: 'echo hi' }]
+  };
+  const res = validateRoutine(routine);
+  assert.equal(res.success, true);
+});

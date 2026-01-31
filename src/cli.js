@@ -44,12 +44,24 @@ function printVersion() {
   process.exit(0);
 }
 
+// Safe name pattern (alphanumeric, dash, underscore, dot - no path traversal)
+const SAFE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 /**
  * init command - Create a new routine file
  */
 function cmdInit(args) {
-  const name = args[0] || 'my-routine';
-  const filename = name.endsWith('.yaml') ? name : `${name}.yaml`;
+  const rawName = args[0] || 'my-routine';
+  const name = rawName.replace(/\.ya?ml$/, '');
+  
+  // Validate name is safe (no path traversal, special chars)
+  if (!SAFE_NAME_PATTERN.test(name)) {
+    console.error(`Error: Invalid routine name "${name}"`);
+    console.error('Name must start with alphanumeric, may contain: a-z A-Z 0-9 . _ -');
+    process.exit(2);
+  }
+  
+  const filename = `${name}.yaml`;
   const filepath = resolve(filename);
   
   if (existsSync(filepath)) {
@@ -57,7 +69,7 @@ function cmdInit(args) {
     process.exit(1);
   }
   
-  const content = generateTemplate(name.replace('.yaml', ''));
+  const content = generateTemplate(name);
   writeFileSync(filepath, content);
   console.log(`Created: ${filepath}`);
   console.log(`\nEdit the file, then run: clawd-ogm run ${filename}`);

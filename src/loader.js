@@ -43,18 +43,29 @@ export function loadRoutine(filePath) {
 }
 
 /**
+ * Sanitize a string for safe YAML embedding
+ * @param {string} str - Input string
+ * @returns {string} YAML-safe quoted string
+ */
+function yamlSafe(str) {
+  // Use JSON.stringify to get a properly escaped string, which is valid YAML
+  return JSON.stringify(String(str));
+}
+
+/**
  * Generate a routine template
  * @param {string} name - Routine name
  * @returns {string} YAML content
  */
 export function generateTemplate(name) {
-  return `name: ${name}
+  const safeName = yamlSafe(name);
+  return `name: ${safeName}
 description: My routine
 
 steps:
   - name: hello
     type: exec
-    command: echo "Hello from ${name}!"
+    command: echo "Hello from routine!"
     
   - name: pause
     type: sleep

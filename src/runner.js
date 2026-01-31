@@ -79,10 +79,13 @@ async function httpStep(step) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), step.timeout || 30000);
     
+    const method = step.method || 'GET';
+    const hasBody = step.body !== undefined && method !== 'GET' && method !== 'HEAD';
+    
     const res = await fetch(step.url, {
-      method: step.method || 'GET',
+      method,
       headers: step.headers,
-      body: step.body ? JSON.stringify(step.body) : undefined,
+      body: hasBody ? JSON.stringify(step.body) : undefined,
       signal: controller.signal,
     });
     
